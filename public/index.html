@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lantern Journal — reflect, quietly</title>
+<meta name="description" content="A calm, private, AI-guided journal. Sign in, write, and see how your week has felt." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#141B2E;
+    --panel:#1B2440;
+    --panel-line:#2E3A5C;
+    --parchment:#EDE6D6;
+    --parchment-dim:#B9B6AC;
+    --amber:#E3A857;
+    --amber-dim:#8A6A3B;
+    --sage:#8FA98F;
+    --rose:#C97B84;
+    --slate:#7C88A8;
+    --focus:#E3A857;
+    --radius:2px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--parchment);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+  }
+  ::selection{ background:var(--amber-dim); color:var(--parchment); }
+  a{ color:var(--amber); }
+  button{ font-family:inherit; }
+  *:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+
+  h1,h2,h3{
+    font-family:'Source Serif 4', Georgia, serif;
+    font-weight:600;
+    margin:0;
+  }
+
+  /* ---------------- Top bar ---------------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:20px 32px;
+    border-bottom:1px solid var(--panel-line);
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .brand-mark{
+    width:22px; height:22px;
+    display:block;
+  }
+  .brand-name{
+    font-size:1.15rem;
+    letter-spacing:0.01em;
+  }
+  .userbox{ display:flex; align-items:center; gap:12px; font-size:0.9rem; color:var(--parchment-dim); }
+  .userbox img{ width:28px; height:28px; border-radius:50%; display:block; }
+
+  .btn{
+    appearance:none;
+    border:1px solid var(--panel-line);
+    background:transparent;
+    color:var(--parchment);
+    padding:9px 16px;
+    font-size:0.9rem;
+    font-weight:500;
+    cursor:pointer;
+    border-radius:var(--radius);
+    transition:border-color 120ms ease, background 120ms ease;
+  }
+  .btn:hover{ border-color:var(--amber); }
+  .btn-primary{
+    background:var(--amber);
+    border-color:var(--amber);
+    color:#1B1506;
+  }
+  .btn-primary:hover{ background:#EFB86D; border-color:#EFB86D; }
+  .btn-primary:disabled{ opacity:0.5; cursor:not-allowed; }
+  .btn-google{ display:flex; align-items:center; gap:10px; }
+
+  /* ---------------- Landing / signed-out state ---------------- */
+  .landing{
+    max-width:640px;
+    margin:0 auto;
+    padding:18vh 24px 10vh;
+    text-align:left;
+  }
+  .landing h1{
+    font-size:2.6rem;
+    line-height:1.15;
+    margin-bottom:18px;
+  }
+  .landing p{
+    color:var(--parchment-dim);
+    font-size:1.05rem;
+    max-width:46ch;
+    margin-bottom:32px;
+  }
+  .lantern-glow{
+    width:64px; height:64px;
+    margin-bottom:28px;
+  }
+
+  /* ---------------- App layout ---------------- */
+  .app{
+    display:none;
+    grid-template-columns: 1fr 1.3fr;
+    max-width:1180px;
+    margin:0 auto;
+    padding:40px 32px 80px;
+    gap:56px;
+  }
+  .app.active{ display:grid; }
+  @media (max-width: 880px){
+    .app{ grid-template-columns: 1fr; gap:40px; padding:28px 20px 60px; }
+  }
+
+  .compose h2{ font-size:1.3rem; margin-bottom:6px; }
+  .compose .sub{ color:var(--parchment-dim); font-size:0.92rem; margin-bottom:20px; }
+
+  textarea#entry-input{
+    width:100%;
+    min-height:220px;
+    background:transparent;
+    border:none;
+    border-top:1px solid var(--panel-line);
+    border-bottom:1px solid var(--panel-line);
+    color:var(--parchment);
+    font-family:'Source Serif 4', Georgia, serif;
+    font-size:1.08rem;
+    line-height:1.7;
+    padding:18px 0;
+    resize:vertical;
+  }
+  textarea#entry-input::placeholder{ color:var(--parchment-dim); opacity:0.6; }
+
+  .compose-actions{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:16px;
+  }
+  .char-count{ font-size:0.8rem; color:var(--parchment-dim); }
+
+  .mood-timeline{ margin-top:52px; }
+  .mood-timeline h3{ font-size:1rem; margin-bottom:4px; }
+  .mood-timeline .sub{ color:var(--parchment-dim); font-size:0.85rem; margin-bottom:16px; }
+  #mood-svg{ width:100%; height:70px; display:block; }
+  .mood-legend{ display:flex; gap:18px; margin-top:10px; flex-wrap:wrap; }
+  .mood-legend span{ font-size:0.78rem; color:var(--parchment-dim); display:flex; align-items:center; gap:6px; }
+  .swatch{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+
+  /* ---------------- Response / history column ---------------- */
+  .thread h2{ font-size:1.3rem; margin-bottom:20px; }
+  .empty-state{ color:var(--parchment-dim); font-size:0.95rem; border-top:1px solid var(--panel-line); padding-top:20px; }
+
+  .entry-row{
+    border-top:1px solid var(--panel-line);
+    padding:22px 0;
+  }
+  .entry-row:last-child{ border-bottom:1px solid var(--panel-line); }
+  .entry-meta{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:10px;
+    font-size:0.78rem;
+    color:var(--parchment-dim);
+  }
+  .mood-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .entry-user-text{
+    font-family:'Source Serif 4', Georgia, serif;
+    font-size:1.02rem;
+    color:var(--parchment-dim);
+    margin-bottom:14px;
+    white-space:pre-wrap;
+  }
+  .entry-ai-text{
+    font-size:0.98rem;
+    white-space:pre-wrap;
+    margin-bottom:14px;
+  }
+  .tag-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .tag{
+    font-size:0.75rem;
+    color:var(--amber);
+    border:1px solid var(--amber-dim);
+    padding:3px 9px;
+    border-radius:var(--radius);
+  }
+  .action-items{ margin:0; padding-left:18px; font-size:0.88rem; color:var(--parchment-dim); }
+  .action-items li{ margin-bottom:4px; }
+  .delete-link{
+    background:none; border:none; color:var(--parchment-dim);
+    font-size:0.75rem; cursor:pointer; padding:0; margin-top:8px;
+  }
+  .delete-link:hover{ color:var(--rose); }
+
+  .status-line{ font-size:0.85rem; color:var(--parchment-dim); margin-top:10px; min-height:1.2em; }
+  .status-line.error{ color:var(--rose); }
+</style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2v3M8 5h8l-1.2 11.5a2.8 2.8 0 0 1-2.8 2.5h0a2.8 2.8 0 0 1-2.8-2.5L8 5Z" stroke="#E3A857" stroke-width="1.4"/>
+        <path d="M9.5 21h5" stroke="#E3A857" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">Lantern Journal</span>
+    </div>
+    <div id="auth-area">
+      <button class="btn btn-google" id="signin-btn">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.7 29.4 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 18.9 13 24 13c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6 29.6 4 24 4c-7.4 0-13.8 4.2-17.7 10.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-1.9 14.3-5.1l-6.6-5.6C29.6 35.1 26.9 36 24 36c-5.3 0-9.8-3.3-11.3-8l-6.6 5.1C9.9 39.6 16.4 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.7 2.1-2.1 3.9-3.9 5.3l6.6 5.6C41.8 35.7 44 30.3 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+        Sign in with Google
+      </button>
+    </div>
+  </header>
+
+  <!-- Signed-out landing -->
+  <section class="landing" id="landing">
+    <svg class="lantern-glow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2v3M8 5h8l-1.2 11.5a2.8 2.8 0 0 1-2.8 2.5h0a2.8 2.8 0 0 1-2.8-2.5L8 5Z" stroke="#E3A857" stroke-width="1.3"/>
+      <path d="M9.5 21h5" stroke="#E3A857" stroke-width="1.3" stroke-linecap="round"/>
+    </svg>
+    <h1>Write it down. Let something read between the lines.</h1>
+    <p>Lantern is a quiet place to put your day into words. Sign in, write freely, and get a short, thoughtful reflection back — along with a private record of how your mood has moved over time.</p>
+    <button class="btn btn-primary btn-google" id="signin-btn-2">Sign in with Google to begin</button>
+  </section>
+
+  <!-- Signed-in app -->
+  <main class="app" id="app">
+    <section class="compose">
+      <h2>Tonight's page</h2>
+      <p class="sub">Write whatever's on your mind. Nothing is graded here.</p>
+      <textarea id="entry-input" placeholder="Start writing..." maxlength="4000"></textarea>
+      <div class="compose-actions">
+        <span class="char-count" id="char-count">0 / 4000</span>
+        <button class="btn btn-primary" id="submit-btn">Send</button>
+      </div>
+      <p class="status-line" id="status-line"></p>
+
+      <div class="mood-timeline">
+        <h3>How the week has felt</h3>
+        <p class="sub">Each mark is one entry, plotted by tone.</p>
+        <svg id="mood-svg" viewBox="0 0 600 70" preserveAspectRatio="none"></svg>
+        <div class="mood-legend">
+          <span><i class="swatch" style="background:#8FA98F"></i>lighter</span>
+          <span><i class="swatch" style="background:#E3A857"></i>even</span>
+          <span><i class="swatch" style="background:#C97B84"></i>heavier</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="thread">
+      <h2>Reflections</h2>
+      <div id="entries-list">
+        <p class="empty-state">Your entries will appear here after you write your first one.</p>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+  // -------------------------------------------------------------------
+  // TODO: replace with your Firebase project's web config.
+  // Find this in Firebase Console → Project settings → General → Your apps.
+  // These values are public identifiers, safe to ship to the client —
+  // access control is enforced by Firestore rules + backend token checks.
+  // -------------------------------------------------------------------
+  const firebaseConfig = {
+    apiKey: "YOUR_FIREBASE_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  const auth = getAuth(firebaseApp);
+  const provider = new GoogleAuthProvider();
+
+  const landing = document.getElementById("landing");
+  const appEl = document.getElementById("app");
+  const authArea = document.getElementById("auth-area");
+  const entryInput = document.getElementById("entry-input");
+  const submitBtn = document.getElementById("submit-btn");
+  const statusLine = document.getElementById("status-line");
+  const entriesList = document.getElementById("entries-list");
+  const charCount = document.getElementById("char-count");
+  const moodSvg = document.getElementById("mood-svg");
+
+  let currentUser = null;
+
+  document.getElementById("signin-btn").addEventListener("click", doSignIn);
+  document.getElementById("signin-btn-2").addEventListener("click", doSignIn);
+
+  async function doSignIn(){
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (err){
+      console.error("Sign-in failed:", err);
+      alert("Sign-in failed. Please try again.");
+    }
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
+    if (user) {
+      landing.style.display = "none";
+      appEl.classList.add("active");
+      renderUserBox(user);
+      await loadHistory();
+    } else {
+      landing.style.display = "block";
+      appEl.classList.remove("active");
+      authArea.innerHTML = `<button class="btn btn-google" id="signin-btn">Sign in with Google</button>`;
+      document.getElementById("signin-btn").addEventListener("click", doSignIn);
+    }
+  });
+
+  function renderUserBox(user){
+    authArea.innerHTML = `
+      <div class="userbox">
+        <img src="${user.photoURL || ''}" alt="" referrerpolicy="no-referrer" />
+        <span>${user.displayName || user.email}</span>
+        <button class="btn" id="signout-btn">Sign out</button>
+      </div>`;
+    document.getElementById("signout-btn").addEventListener("click", () => signOut(auth));
+  }
+
+  entryInput.addEventListener("input", () => {
+    charCount.textContent = `${entryInput.value.length} / 4000`;
+  });
+
+  async function authedFetch(path, options = {}){
+    const token = await currentUser.getIdToken();
+    return fetch(path, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+  }
+
+  submitBtn.addEventListener("click", submitEntry);
+  entryInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitEntry();
+  });
+
+  async function submitEntry(){
+    const text = entryInput.value.trim();
+    if (!text) return;
+
+    submitBtn.disabled = true;
+    setStatus("Reading what you wrote...", false);
+
+    try {
+      const res = await authedFetch("/api/journal", {
+        method: "POST",
+        body: JSON.stringify({ entry: text }),
+      });
+
+      if (!res.ok){
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+
+      entryInput.value = "";
+      charCount.textContent = "0 / 4000";
+      setStatus("", false);
+      await loadHistory();
+    } catch (err){
+      console.error(err);
+      setStatus(err.message || "Something went wrong. Please try again.", true);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  async function deleteEntry(id){
+    try {
+      await authedFetch(`/api/journal/${id}`, { method: "DELETE" });
+      await loadHistory();
+    } catch (err){
+      console.error("Delete failed:", err);
+    }
+  }
+
+  function setStatus(msg, isError){
+    statusLine.textContent = msg;
+    statusLine.classList.toggle("error", !!isError);
+  }
+
+  const MOOD_COLOR = {
+    joyful: "#8FA98F", content: "#8FA98F", grateful: "#8FA98F", hopeful: "#8FA98F",
+    neutral: "#E3A857", tired: "#E3A857",
+    anxious: "#C97B84", sad: "#C97B84", frustrated: "#C97B84", overwhelmed: "#C97B84",
+  };
+
+  async function loadHistory(){
+    try {
+      const res = await authedFetch("/api/journal");
+      if (!res.ok) throw new Error("Could not load history");
+      const { entries } = await res.json();
+      renderEntries(entries);
+      renderMoodTimeline(entries);
+    } catch (err){
+      console.error(err);
+    }
+  }
+
+  function renderEntries(entries){
+    if (!entries || entries.length === 0){
+      entriesList.innerHTML = `<p class="empty-state">Your entries will appear here after you write your first one.</p>`;
+      return;
+    }
+
+    entriesList.innerHTML = entries.map((e) => {
+      const date = e.createdAt ? new Date(e.createdAt).toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+      }) : "";
+      const color = MOOD_COLOR[e.mood] || "#7C88A8";
+      const tags = (e.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join("");
+      const actions = (e.actionItems && e.actionItems.length)
+        ? `<ul class="action-items">${e.actionItems.map(a => `<li>${escapeHtml(a)}</li>`).join("")}</ul>`
+        : "";
+      return `
+        <article class="entry-row">
+          <div class="entry-meta">
+            <span class="mood-dot" style="background:${color}"></span>
+            <span>${date}</span>
+            <span>·</span>
+            <span>${escapeHtml(e.mood || "")}</span>
+          </div>
+          <p class="entry-user-text">${escapeHtml(e.entry)}</p>
+          <p class="entry-ai-text">${escapeHtml(e.aiResponse)}</p>
+          ${tags ? `<div class="tag-row">${tags}</div>` : ""}
+          ${actions}
+          <button class="delete-link" data-id="${e.id}">Remove this entry</button>
+        </article>`;
+    }).join("");
+
+    entriesList.querySelectorAll(".delete-link").forEach(btn => {
+      btn.addEventListener("click", () => deleteEntry(btn.dataset.id));
+    });
+  }
+
+  function renderMoodTimeline(entries){
+    const points = [...(entries || [])].reverse(); // oldest first
+    moodSvg.innerHTML = "";
+    if (points.length === 0) return;
+
+    const w = 600, h = 70, pad = 10;
+    const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
+
+    const ns = "http://www.w3.org/2000/svg";
+    const linePath = points.map((p, i) => {
+      const x = pad + step * i;
+      const y = h - pad - ((p.moodScore || 5) / 10) * (h - pad * 2);
+      return `${i === 0 ? "M" : "L"}${x},${y}`;
+    }).join(" ");
+
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", linePath);
+    path.setAttribute("stroke", "#3A4568");
+    path.setAttribute("stroke-width", "1");
+    path.setAttribute("fill", "none");
+    moodSvg.appendChild(path);
+
+    points.forEach((p, i) => {
+      const x = pad + step * i;
+      const y = h - pad - ((p.moodScore || 5) / 10) * (h - pad * 2);
+      const circle = document.createElementNS(ns, "circle");
+      circle.setAttribute("cx", x);
+      circle.setAttribute("cy", y);
+      circle.setAttribute("r", 4);
+      circle.setAttribute("fill", MOOD_COLOR[p.mood] || "#7C88A8");
+      moodSvg.appendChild(circle);
+    });
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+package-lock.json.bak
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+serviceAccountKey.json
+firebase-adminsdk-*.json
+gcp-sa-*.json
+
+# Build artifacts
+dist/
+build/
+*.log
+npm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Firebase local emulator state
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

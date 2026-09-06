@@ -1,0 +1,56 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// Lantern Journal — Firestore Security Rules
+//
+// Defense in depth: the API server already scopes every read/write to
+// request.auth's own uid, but these rules are the ground-truth enforcement
+// layer. Even a compromised or buggy backend, or direct client SDK access,
+// cannot read or write another user's journal data.
+// ---------------------------------------------------------------------------
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Per-user document holding profile-level fields (optional use).
+    match /users/{userId} {
+      allow read, update: if isOwner(userId);
+      // Users cannot delete their own root profile doc or create arbitrary
+      // ones directly from the client — that is handled server-side on
+      // first sign-in if ever needed.
+      allow create, delete: if false;
+
+      // Journal entries are strictly isolated per user.
+      match /journal_entries/{entryId} {
+        allow read, delete: if isOwner(userId);
+
+        // Entries are created/updated only with a well-formed shape and
+        // only by their owner. In production, entry creation happens via
+        // the authenticated backend (which uses the Admin SDK and bypasses
+        // these rules), so this branch primarily protects against any
+        // future direct-from-client writes.
+        allow create: if isOwner(userId) && isValidEntry();
+        allow update: if isOwner(userId) && isValidEntry();
+      }
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isValidEntry() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['entry', 'createdAt'])
+        && data.entry is string
+        && data.entry.size() > 0
+        && data.entry.size() <= 4000
+        && (!('mood' in data) || data.mood is string)
+        && (!('tags' in data) || data.tags is list)
+        && (!('actionItems' in data) || data.actionItems is list);
+    }
+  }
+}
