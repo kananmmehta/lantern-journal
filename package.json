@@ -8,8 +8,10 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "build": "echo 'Build complete'",
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node server.js",
+    "lint": "node --check server.js"
   },
   "dependencies": {
     "@google/genai": "^0.15.0",

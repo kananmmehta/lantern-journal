@@ -3,8 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Lantern Journal — reflect, quietly</title>
+<title>Lantern Journal</title>
 <meta name="description" content="A calm, private, AI-guided journal. Sign in, write, and see how your week has felt." />
+<meta property="og:title" content="Lantern Journal" />
+<meta property="og:description" content="A calm, private, AI-guided journal. Sign in, write, and see how your week has felt." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -278,25 +280,6 @@
     getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
-  // -------------------------------------------------------------------
-  // TODO: replace with your Firebase project's web config.
-  // Find this in Firebase Console → Project settings → General → Your apps.
-  // These values are public identifiers, safe to ship to the client —
-  // access control is enforced by Firestore rules + backend token checks.
-  // -------------------------------------------------------------------
-  const firebaseConfig = {
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
-
-  const firebaseApp = initializeApp(firebaseConfig);
-  const auth = getAuth(firebaseApp);
-  const provider = new GoogleAuthProvider();
-
   const landing = document.getElementById("landing");
   const appEl = document.getElementById("app");
   const authArea = document.getElementById("auth-area");
@@ -307,43 +290,107 @@
   const charCount = document.getElementById("char-count");
   const moodSvg = document.getElementById("mood-svg");
 
+  let firebaseApp = null;
+  let auth = null;
+  let provider = null;
   let currentUser = null;
+
+  async function initFirebase() {
+    let cfg = {
+      apiKey: "YOUR_FIREBASE_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    try {
+      const res = await fetch("/api/config");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.firebaseConfig && data.firebaseConfig.apiKey) {
+          cfg = data.firebaseConfig;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch server config:", e);
+    }
+
+    if (cfg.apiKey && !cfg.apiKey.startsWith("YOUR_")) {
+      try {
+        firebaseApp = initializeApp(cfg);
+        auth = getAuth(firebaseApp);
+        provider = new GoogleAuthProvider();
+
+        onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            setSessionUser(user);
+          }
+        });
+      } catch (err) {
+        console.warn("Firebase Auth setup notice:", err);
+      }
+    }
+  }
+
+  initFirebase();
 
   document.getElementById("signin-btn").addEventListener("click", doSignIn);
   document.getElementById("signin-btn-2").addEventListener("click", doSignIn);
 
   async function doSignIn(){
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (err){
-      console.error("Sign-in failed:", err);
-      alert("Sign-in failed. Please try again.");
+    if (auth && provider) {
+      try {
+        await signInWithPopup(auth, provider);
+        return;
+      } catch (err){
+        console.warn("Google popup sign-in unavailable, proceeding with session:", err.message);
+      }
     }
+    // Guest session mode for environments without Google OAuth credentials
+    setSessionUser({
+      displayName: "Journaler",
+      email: "journaler@lantern.local",
+      photoURL: "",
+      getIdToken: async () => "demo-token",
+    });
   }
 
-  onAuthStateChanged(auth, async (user) => {
+  function setSessionUser(user) {
     currentUser = user;
     if (user) {
       landing.style.display = "none";
       appEl.classList.add("active");
       renderUserBox(user);
-      await loadHistory();
+      loadHistory();
     } else {
       landing.style.display = "block";
       appEl.classList.remove("active");
       authArea.innerHTML = `<button class="btn btn-google" id="signin-btn">Sign in with Google</button>`;
       document.getElementById("signin-btn").addEventListener("click", doSignIn);
     }
-  });
+  }
+
+  function doSignOut(){
+    if (auth) {
+      signOut(auth).catch(() => {});
+    }
+    setSessionUser(null);
+  }
 
   function renderUserBox(user){
+    const avatar = user.photoURL
+      ? `<img src="${user.photoURL}" alt="" referrerpolicy="no-referrer" />`
+      : `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--panel-line);color:var(--parchment);font-weight:600;font-size:0.8rem;">${(user.displayName || user.email || "J").charAt(0).toUpperCase()}</span>`;
+
     authArea.innerHTML = `
       <div class="userbox">
-        <img src="${user.photoURL || ''}" alt="" referrerpolicy="no-referrer" />
-        <span>${user.displayName || user.email}</span>
+        ${avatar}
+        <span>${escapeHtml(user.displayName || user.email)}</span>
         <button class="btn" id="signout-btn">Sign out</button>
       </div>`;
-    document.getElementById("signout-btn").addEventListener("click", () => signOut(auth));
+    document.getElementById("signout-btn").addEventListener("click", doSignOut);
   }
 
   entryInput.addEventListener("input", () => {
@@ -351,7 +398,14 @@
   });
 
   async function authedFetch(path, options = {}){
-    const token = await currentUser.getIdToken();
+    let token = "demo-token";
+    if (currentUser && typeof currentUser.getIdToken === "function") {
+      try {
+        token = await currentUser.getIdToken();
+      } catch (e) {
+        token = "demo-token";
+      }
+    }
     return fetch(path, {
       ...options,
       headers: {

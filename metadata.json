@@ -1,0 +1,6 @@
+{
+  "name": "Lantern Journal",
+  "description": "A calm, private, AI-guided journal with Gemini reflections and mood timeline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
